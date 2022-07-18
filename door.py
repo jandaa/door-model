@@ -1,21 +1,19 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from rigid_transform import Rotation, Vector3
 import math
-import copy
+
+from rotations import R_x, R_y
 
 # Conversion Constants
 MM_TO_M = 1 / 1000
 
 #############################################################
 # Parameters of hinge frame
-roll = 0
-pitch = 0
-
-exaggerate_angle = 0
+roll = 0.0
+pitch = 0.0
 
 # Parameters from OEM
-hinge_upper_point = np.array([753.367, 896.342 - exaggerate_angle, 512.62]) * MM_TO_M
+hinge_upper_point = np.array([753.367, 896.342, 512.62]) * MM_TO_M
 hinge_lower_point = np.array([749.783, 910.696, 101.85]) * MM_TO_M
 center_of_mass = np.array([1252.737, 845.036, 400.716]) * MM_TO_M
 mass_in_kg = 36.1736
@@ -29,25 +27,26 @@ rotation_axis = rotation_axis / np.linalg.norm(rotation_axis)
 
 # Compute the closest point around which the center of mass rotates
 # This will become the origin of all reference frames
-center_of_mass = center_of_mass
+# origin = center_of_mass.dot(rotation_axis) * rotation_axis
+center_of_mass = center_of_mass - hinge_lower_point
 origin = center_of_mass.dot(rotation_axis) * rotation_axis
 
 # Compute the axis from center of mass to origin
 # needs to going the other way
 cm_to_origin = center_of_mass - origin
-l = np.linalg.norm(cm_to_origin)
-cm_to_origin = cm_to_origin / np.linalg.norm(cm_to_origin)
+cm_to_origin_distance = np.linalg.norm(cm_to_origin)
+cm_to_origin = cm_to_origin / cm_to_origin_distance
 
 # Compute the hinge reference frame
 # using the rotation axis and cm_to_origin
 # and computing cross product between them
-hinge_x = np.cross(cm_to_origin, rotation_axis)
+hinge_x = np.cross(rotation_axis, cm_to_origin)
 R_hinge_to_inertial = np.vstack([hinge_x, cm_to_origin, rotation_axis])
 R_inertial_to_hinge = R_hinge_to_inertial.T
 
-# Compute the starting angle between
-to_axis = np.array([1, 0, 0])
-starting_angle = np.arccos(cm_to_origin.dot(to_axis) / l)
+# Add roll and pitch
+R_roll_pitch = R_x(roll) @ R_y(pitch)
+R_inertial_to_hinge = R_roll_pitch @ R_inertial_to_hinge
 
 #############################################################
 
@@ -59,42 +58,42 @@ num_points = 10
 x = np.linspace(0, 1, num=num_points)
 for i in range(3):
     points = x * R_inertial_to_hinge[:, i].reshape(3, 1)
-    ax.plot3D(points[0], points[1], points[2], "blue", label="Car Front")
+    if i == 0:
+        ax.plot3D(points[0], points[1], points[2], "blue", label="Door Frame")
+    else:
+        ax.plot3D(points[0], points[1], points[2], "blue")
 
 # Plot inertial frame
 num_points = 10
 zeros = np.zeros(num_points)
 ones = np.linspace(0, 1, num=num_points)
-ax.plot3D(ones, zeros, zeros, "cyan", label="Inertial Frame - Car Rear")
-ax.plot3D(zeros, ones, zeros, "red", label="Inertial Frame")
+ax.plot3D(ones, zeros, zeros, "red", label="Inertial Frame")
+ax.plot3D(zeros, ones, zeros, "red")
 ax.plot3D(zeros, zeros, ones, "red")
 
-# Create motion of door in hinge frame
+# Plot car frame
+fx = R_roll_pitch @ np.vstack([ones, zeros, zeros])
+fy = R_roll_pitch @ np.vstack([zeros, ones, zeros])
+fz = R_roll_pitch @ np.vstack([zeros, zeros, ones])
+ax.plot3D(fx[0], fx[1], fx[2], "teal", label="Car Frame - Car Rear")
+ax.plot3D(fy[0], fy[1], fy[2], "orange", label="Car Frame")
+ax.plot3D(fz[0], fz[1], fz[2], "orange")
+
+# Compute the path of the door in hinge frame
 num_points = 100
-angles = np.linspace(-math.radians(max_door_angle_in_degrees), 0, num=num_points)
-points = np.array(
+angles = np.linspace(0, math.radians(max_door_angle_in_degrees), num=num_points)
+points = cm_to_origin_distance * np.array(
     [
-        l * np.cos(angles),
-        l * np.sin(angles),
+        np.sin(angles),
+        np.cos(angles),
         np.zeros(num_points),
     ]
 )
 
-# my door motion equation
-my_points = np.array(
-    [
-        np.cos(pitch) * np.sin(angles),
-        np.sin(roll) * np.sin(pitch) * np.sin(angles) + np.cos(roll) * np.cos(angles),
-        -np.cos(roll) * np.sin(pitch) * np.sin(angles) + np.sin(roll) * np.cos(angles),
-    ]
-)
+# Convert door path to the inertial frame
+points = R_inertial_to_hinge @ points
 
-# convert to door hinge
-my_points = R_inertial_to_hinge @ my_points
-
-ax.plot3D(
-    my_points[0], my_points[1], my_points[2], "purple", label="Door Motion - My Eq"
-)
+ax.plot3D(points[0], points[1], points[2], "purple", label="Door Motion")
 ax.axis([-1, 1, -1, 1])
 
 plt.legend()
