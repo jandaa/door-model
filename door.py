@@ -41,7 +41,7 @@ cm_to_origin = cm_to_origin / cm_to_origin_distance
 # using the rotation axis and cm_to_origin
 # and computing cross product between them
 hinge_x = np.cross(rotation_axis, cm_to_origin)
-R_hinge_to_inertial = np.vstack([hinge_x, cm_to_origin, rotation_axis])
+R_hinge_to_inertial = np.vstack([cm_to_origin, hinge_x, rotation_axis])
 R_inertial_to_hinge = R_hinge_to_inertial.T
 
 # Add roll and pitch
@@ -84,8 +84,8 @@ num_points = 100
 angles = np.linspace(0, math.radians(max_door_angle_in_degrees), num=num_points)
 points = cm_to_origin_distance * np.array(
     [
-        np.sin(angles),
         np.cos(angles),
+        np.sin(angles),
         np.zeros(num_points),
     ]
 )
