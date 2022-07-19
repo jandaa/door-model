@@ -1,20 +1,15 @@
 from dataclasses import dataclass
+import math
 import numpy as np
 import matplotlib.pyplot as plt
-import math
+import plotly.graph_objects as go
+
 
 from rotations import R_x, R_y
 
 # Constants
 MM_TO_M = 1 / 1000
 G = 9.81  # Force of Gravity (m/s^2)
-
-#############################################################
-# Parameters of hinge frame
-# roll = math.radians(6.27)
-roll = 0
-pitch = math.radians(11.8)
-# pitch = 0
 
 
 @dataclass
@@ -189,20 +184,44 @@ class DoorModel:
         plt.legend()
         plt.show()
 
+    def plot_torques_new(self, poses: list[CarPose]):
+
+        fig = go.Figure()
+        angles = self.angles
+        for pose in poses:
+            torques = self.compute_torque_along_door_motion(
+                roll=pose.roll, pitch=pose.pitch
+            )
+            fig.add_trace(
+                go.Scatter(
+                    x=angles * 180 / math.pi,
+                    y=torques,
+                    mode="lines",
+                    name=f"Roll: {math.degrees(pose.roll)}, Pitch: {math.degrees(pose.pitch)}",
+                )
+            )
+
+        fig.update_layout(
+            title="Hinge Torque",
+            xaxis_title="Door Position From Closed (Degrees)",
+            yaxis_title="Torque at Hinge (Nm)",
+        )
+        fig.show()
+
 
 if __name__ == "__main__":
 
     door_model = DoorModel()
-    door_model.visualize_in_3D(pitch=math.radians(11.8), roll=0)
-    door_model.plot_torques(
+    # door_model.visualize_in_3D(pitch=math.radians(11.8), roll=0)
+    door_model.plot_torques_new(
         [
             CarPose(pitch=math.radians(11.8), roll=0),
             CarPose(pitch=0, roll=math.radians(6.27)),
         ]
     )
 
-    door_model.plot_torques(
-        [
-            CarPose(pitch=0, roll=0),
-        ]
-    )
+    # door_model.plot_torques(
+    #     [
+    #         CarPose(pitch=0, roll=0),
+    #     ]
+    # )
