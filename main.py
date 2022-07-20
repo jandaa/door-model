@@ -28,6 +28,8 @@ class DoorModel:
         # Parameters from OEM
         self.hinge_upper_point = np.array([753.367, 896.342, 512.62]) * MM_TO_M
         self.hinge_lower_point = np.array([749.783, 910.696, 101.85]) * MM_TO_M
+        self.body_pillar_point = np.array([840.641, 831.029, 365.224]) * MM_TO_M
+        self.actuator_pivot_point = np.array([897.322, 840.001, 365.043]) * MM_TO_M
         self.center_of_mass = np.array([1252.737, 845.036, 400.716]) * MM_TO_M
         self.mass_in_kg = 36.1736
         self.max_door_angle_in_degrees = 67
@@ -46,25 +48,25 @@ class DoorModel:
         """Compute reference frame of hinge w.r.t. inertial frame."""
 
         # Compute rotational axis around which the door rotates
-        rotation_axis = self.hinge_upper_point - self.hinge_lower_point
-        rotation_axis = rotation_axis / np.linalg.norm(rotation_axis)
+        self.rotation_axis = self.hinge_upper_point - self.hinge_lower_point
+        self.rotation_axis = self.rotation_axis / np.linalg.norm(self.rotation_axis)
 
         # Compute the closest point around which the center of mass rotates
         # This will become the origin of all reference frames
         self.center_of_mass = self.center_of_mass - self.hinge_lower_point
-        origin = self.center_of_mass.dot(rotation_axis) * rotation_axis
+        self.origin = self.center_of_mass.dot(self.rotation_axis) * self.rotation_axis
 
         # Compute the axis from center of mass to origin
         # needs to going the other way
-        cm_to_origin = self.center_of_mass - origin
+        cm_to_origin = self.center_of_mass - self.origin
         cm_to_origin_distance = np.linalg.norm(cm_to_origin)
         cm_to_origin = cm_to_origin / cm_to_origin_distance
 
         # Compute the hinge reference frame
         # using the rotation axis and cm_to_origin
         # and computing cross product between them
-        hinge_y = np.cross(rotation_axis, cm_to_origin)
-        R_hinge_to_car = np.vstack([cm_to_origin, hinge_y, rotation_axis])
+        hinge_y = np.cross(self.rotation_axis, cm_to_origin)
+        R_hinge_to_car = np.vstack([cm_to_origin, hinge_y, self.rotation_axis])
         R_car_to_hinge = R_hinge_to_car.T
 
         self.R_car_to_hinge = R_car_to_hinge
@@ -156,7 +158,14 @@ class DoorModel:
             )
 
             # Compute torque as force * lever arm (Nm)
-            torque = (
+            direction = gravity_in_hinge_direction / np.linalg.norm(
+                gravity_in_hinge_direction
+            )
+            if direction.dot(tangent) < 0:
+                direction = 1
+            else:
+                direction = -1
+            torque = direction * (
                 np.linalg.norm(gravity_in_hinge_direction) * self.cm_to_origin_distance
             )
             torques.append(torque)
@@ -207,6 +216,83 @@ class DoorModel:
             yaxis_title="Torque at Hinge (Nm)",
         )
         fig.show()
+
+    def visualize_hinge_and_center_of_mass(self):
+        ax = plt.axes(projection="3d")
+
+        ax.scatter3D(
+            self.center_of_mass[0],
+            self.center_of_mass[1],
+            self.center_of_mass[2],
+            "green",
+            label="Center of Mass",
+        )
+        ax.scatter3D(
+            self.origin[0],
+            self.origin[1],
+            self.origin[2],
+            "orange",
+            label="origin",
+        )
+        ax.scatter3D(
+            self.body_pillar_point[0],
+            self.body_pillar_point[1],
+            self.body_pillar_point[2],
+            "purple",
+            label="Body Pillar Point",
+        )
+        ax.scatter3D(
+            self.actuator_pivot_point[0],
+            self.actuator_pivot_point[1],
+            self.actuator_pivot_point[2],
+            "blue",
+            label="Actuator Pivot Point",
+        )
+        ax.scatter3D(
+            self.actuation_origin[0],
+            self.actuation_origin[1],
+            self.actuation_origin[2],
+            "blue",
+            label="Actuation Origin",
+        )
+        ax.plot3D(
+            [self.hinge_upper_point[0] - self.hinge_lower_point[0], 0],
+            [self.hinge_upper_point[1] - self.hinge_lower_point[1], 0],
+            [self.hinge_upper_point[2] - self.hinge_lower_point[2], 0],
+            "brown",
+            label="Rotation Axis",
+        )
+        ax.plot3D(
+            [self.origin[0], self.center_of_mass[0]],
+            [self.origin[1], self.center_of_mass[1]],
+            [self.origin[2], self.center_of_mass[2]],
+            "orange",
+            label="cm to origin",
+        )
+        ax.plot3D(
+            [self.actuator_pivot_point[0], self.center_of_mass[0]],
+            [self.actuator_pivot_point[1], self.center_of_mass[1]],
+            [self.actuator_pivot_point[2], self.center_of_mass[2]],
+            "gray",
+            label="CM to Actuation Point - Rigid",
+        )
+        ax.plot3D(
+            [self.actuator_pivot_point[0], self.actuation_origin[0]],
+            [self.actuator_pivot_point[1], self.actuation_origin[1]],
+            [self.actuator_pivot_point[2], self.actuation_origin[2]],
+            "gray",
+            label="Actuation Point to Rotational Axis - Rigid",
+        )
+        ax.plot3D(
+            [self.body_pillar_point[0], self.actuation_origin[0]],
+            [self.body_pillar_point[1], self.actuation_origin[1]],
+            [self.body_pillar_point[2], self.actuation_origin[2]],
+            "magenta",
+            label="Body Pillar Moment Arm - Rigid",
+        )
+
+        plt.legend()
+        plt.show()
 
 
 if __name__ == "__main__":
