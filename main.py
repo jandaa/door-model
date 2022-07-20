@@ -1,5 +1,7 @@
+from bdb import effective
 from dataclasses import dataclass
 import math
+from this import d
 import numpy as np
 import matplotlib.pyplot as plt
 import plotly.graph_objects as go
@@ -8,7 +10,8 @@ import plotly.graph_objects as go
 from rotations import R_x, R_y
 
 # Constants
-MM_TO_M = 1 / 1000
+M_TO_MM = 1000
+MM_TO_M = 1 / M_TO_MM
 G = 9.81  # Force of Gravity (m/s^2)
 
 
@@ -16,6 +19,13 @@ G = 9.81  # Force of Gravity (m/s^2)
 class CarPose:
     pitch: float = 0
     roll: float = 0
+
+
+# Define the different cases
+PITCH_UP = CarPose(pitch=math.radians(11.8), roll=0)
+PITCH_DOWN = CarPose(pitch=math.radians(-11.8), roll=0)
+ROLL_PASSENGER_SIDE = CarPose(pitch=0, roll=math.radians(-6.27))
+ROLL_DRIVER_SIDE = CarPose(pitch=0, roll=math.radians(6.27))
 
 
 class DoorModel:
@@ -43,6 +53,7 @@ class DoorModel:
 
         # Preprocessing
         self._compute_hinge_reference_frame()
+        self._compute_actuation_reference_frame()
 
     def _compute_hinge_reference_frame(self):
         """Compute reference frame of hinge w.r.t. inertial frame."""
@@ -71,6 +82,50 @@ class DoorModel:
 
         self.R_car_to_hinge = R_car_to_hinge
         self.cm_to_origin_distance = cm_to_origin_distance
+
+    def _compute_actuation_reference_frame(self):
+        """Compute actuation frame of hinge w.r.t. inertial frame."""
+
+        # Set all vectors around lower hinge point
+        self.body_pillar_point -= self.hinge_lower_point
+        self.actuator_pivot_point -= self.hinge_lower_point
+
+        # Compute rotational axis around which the door rotates
+        rotation_axis = self.hinge_upper_point - self.hinge_lower_point
+        rotation_axis = rotation_axis / np.linalg.norm(rotation_axis)
+
+        # Compute the actuation origin
+        self.body_pillar_origin = (
+            self.body_pillar_point.dot(rotation_axis) * rotation_axis
+        )
+
+        self.actuation_origin = (
+            self.actuator_pivot_point.dot(rotation_axis) * rotation_axis
+        )
+
+        # Compute Actuation axis
+        actuation_axis = self.actuator_pivot_point - self.actuation_origin
+        actuation_axis /= np.linalg.norm(actuation_axis)
+
+        # Compute Actuation Frame
+        actuation_y = np.cross(self.rotation_axis, actuation_axis)
+        self.R_actuation_to_car = np.vstack(
+            [actuation_axis, actuation_y, self.rotation_axis]
+        )
+
+        # Compute Body Pillar axis
+        body_pillar_axis = self.body_pillar_point - self.body_pillar_origin
+        body_pillar_axis /= np.linalg.norm(body_pillar_axis)
+
+        # Compute Body Pillar Frame
+        body_pillar_y = np.cross(self.rotation_axis, body_pillar_axis)
+        self.R_body_pillar_to_car = np.vstack(
+            [body_pillar_axis, body_pillar_y, self.rotation_axis]
+        )
+
+        # How to go between the two reference frames?
+        R_car_to_actuation = self.R_actuation_to_car.T
+        self.R_body_pillar_to_actuation = self.R_body_pillar_to_car @ R_car_to_actuation
 
     def get_rotation_inertial_to_car(self, roll, pitch):
         return R_x(roll) @ R_y(pitch)
@@ -217,6 +272,67 @@ class DoorModel:
         )
         fig.show()
 
+    def compute_effective_moment_arm_along_door_motion(self):
+        """
+        Compute effective moment arm all in the body pillar frame.
+        Where   t = F * l_e
+                l_e = cos(theta) * l --> effective moment arm
+        """
+
+        # Compute actuation points in body pillar frame
+        actuator_pivot_point = self.actuator_pivot_point - self.body_pillar_origin
+        actuator_pivot_point = self.R_body_pillar_to_car @ actuator_pivot_point
+        body_pillar_point = self.body_pillar_point - self.body_pillar_origin
+        body_pillar_point = self.R_body_pillar_to_car @ body_pillar_point
+
+        # Compute door trajectory
+        angles = self.angles
+        points = np.linalg.norm(actuator_pivot_point) * np.array(
+            [
+                np.cos(angles),
+                np.sin(angles),
+                np.zeros(self.angles.size),
+            ]
+        )
+        points = self.R_body_pillar_to_actuation @ points
+        points[2] += actuator_pivot_point[2]
+
+        # Setup constants
+        moment_arm = np.linalg.norm(body_pillar_point)
+        torque_axis = np.array([0, 1, 0])
+
+        effective_moment_arms = []
+        for point_ind in range(self.num_door_angles):
+
+            # Project Actuator force onto torque direction
+            force_axis = points[:, point_ind] - body_pillar_point
+
+            cos_theta = np.dot(force_axis, torque_axis) / (
+                np.linalg.norm(force_axis) * np.linalg.norm(torque_axis)
+            )
+            moment_arm_effective_length = cos_theta * moment_arm * M_TO_MM
+            effective_moment_arms.append(moment_arm_effective_length)
+
+        return effective_moment_arms
+
+    def plot_moment_arm(self):
+
+        ax = plt.axes()
+
+        moment_arm = self.compute_effective_moment_arm_along_door_motion()
+        ax.plot(self.angles * 180 / math.pi, moment_arm)
+
+        plt.title(f"Moment Arm vs Door Position")
+        ax.tick_params(width=2)
+        ax.set_xlabel("Door Position From Closed (Degrees)")
+        ax.set_ylabel("Moment Arm (mm)")
+        ax.set_ylim(bottom=0)
+        ax.set_xlim(left=0)
+        ax.set_yticks(range(0, 125, 5))
+        plt.grid()
+        plt.legend()
+        plt.show()
+
     def visualize_hinge_and_center_of_mass(self):
         ax = plt.axes(projection="3d")
 
@@ -294,20 +410,117 @@ class DoorModel:
         plt.legend()
         plt.show()
 
+    def visualize_actuation_frames(self):
+
+        # Compute actuation points in body pillar frame
+        actuator_pivot_point = self.actuator_pivot_point - self.body_pillar_origin
+        actuator_pivot_point = self.R_body_pillar_to_car @ actuator_pivot_point
+        body_pillar_point = self.body_pillar_point - self.body_pillar_origin
+        body_pillar_point = self.R_body_pillar_to_car @ body_pillar_point
+
+        angles = self.angles
+        points = np.linalg.norm(actuator_pivot_point) * np.array(
+            [
+                np.cos(angles),
+                np.sin(angles),
+                np.zeros(self.angles.size),
+            ]
+        )
+        points = self.R_body_pillar_to_actuation @ points
+        points[2] += actuator_pivot_point[2]
+
+        # Project Actuator force onto torque direction
+        v1 = actuator_pivot_point - body_pillar_point
+        v2 = np.array([0, 1, 0])
+        v_proj = np.dot(v1, v2) * v2 + body_pillar_point
+
+        # Plot the axes
+        ax = plt.axes(projection="3d")
+        ax.scatter3D(
+            body_pillar_point[0],
+            body_pillar_point[1],
+            body_pillar_point[2],
+            "orange",
+            label="Body Pillar Point",
+        )
+        ax.plot3D(
+            [body_pillar_point[0], 0],
+            [body_pillar_point[1], 0],
+            [body_pillar_point[2], 0],
+            "green",
+            label="Body Pillar Point Axis",
+        )
+        ax.scatter3D(
+            actuator_pivot_point[0],
+            actuator_pivot_point[1],
+            actuator_pivot_point[2],
+            "blue",
+            label="Actuator Pivot Point",
+        )
+        ax.plot3D(
+            [actuator_pivot_point[0], 0],
+            [actuator_pivot_point[1], 0],
+            [actuator_pivot_point[2], 0],
+            "yellow",
+            label="Actuator Pivot Axis",
+        )
+        ax.plot3D(
+            [actuator_pivot_point[0], body_pillar_point[0]],
+            [actuator_pivot_point[1], body_pillar_point[1]],
+            [actuator_pivot_point[2], body_pillar_point[2]],
+            "purple",
+            label="Force",
+        )
+        ax.plot3D(
+            [body_pillar_point[0], body_pillar_point[0]],
+            [0.1, body_pillar_point[1]],
+            [0, 0],
+            "brown",
+            label="Torque Direction",
+        )
+        ax.plot3D(
+            [v_proj[0], body_pillar_point[0]],
+            [v_proj[1], body_pillar_point[1]],
+            [v_proj[2], body_pillar_point[2]],
+            "pink",
+            label="Torque Magnitude",
+        )
+        ax.plot3D(
+            points[0],
+            points[1],
+            points[2],
+            "blue",
+            label="Actuator Path",
+        )
+
+        ax.set_zlim3d(-0.05, 0.2)
+        plt.legend()
+        plt.show()
+
 
 if __name__ == "__main__":
 
     door_model = DoorModel()
-    # door_model.visualize_in_3D(pitch=math.radians(11.8), roll=0)
+
+    # Visualizations
+    door_model.visualize_hinge_and_center_of_mass()
+    door_model.visualize_in_3D(pitch=0, roll=0)
+    door_model.visualize_actuation_frames()
+
+    # Plot moment arm
+    door_model.plot_moment_arm()
+
+    # Plot torques
     door_model.plot_torques_new(
         [
             CarPose(pitch=math.radians(11.8), roll=0),
             CarPose(pitch=0, roll=math.radians(6.27)),
+            CarPose(pitch=0, roll=math.radians(-6.27)),
+            CarPose(pitch=math.radians(-11.8), roll=0),
         ]
     )
-
-    # door_model.plot_torques(
-    #     [
-    #         CarPose(pitch=0, roll=0),
-    #     ]
-    # )
+    door_model.plot_torques_new(
+        [
+            CarPose(pitch=0, roll=0),
+        ]
+    )
