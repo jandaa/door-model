@@ -26,21 +26,32 @@ ROLL_PASSENGER_SIDE = CarPose(pitch=0, roll=math.radians(-6.27))
 ROLL_DRIVER_SIDE = CarPose(pitch=0, roll=math.radians(6.27))
 
 
+@dataclass
+class DoorModelParameters:
+    hinge_upper_point: np.array = np.array([753.367, 896.342, 512.62])
+    hinge_lower_point: np.array = np.array([749.783, 910.696, 101.85])
+    body_pillar_point: np.array = np.array([840.641, 831.029, 365.224])
+    actuator_pivot_point: np.array = np.array([897.322, 840.001, 365.043])
+    center_of_mass: np.array = np.array([1252.737, 845.036, 400.716])
+    mass_in_kg: float = 36.1736
+    max_door_angle_in_degrees: float = 67.00
+
+
 class DoorModel:
     """
     Computes the torques for a given set of door hinge parameters with pitch and roll
     """
 
-    def __init__(self):
+    def __init__(self, parameters: DoorModelParameters = DoorModelParameters()):
 
         # Parameters from OEM
-        self.hinge_upper_point = np.array([753.367, 896.342, 512.62]) * MM_TO_M
-        self.hinge_lower_point = np.array([749.783, 910.696, 101.85]) * MM_TO_M
-        self.body_pillar_point = np.array([840.641, 831.029, 365.224]) * MM_TO_M
-        self.actuator_pivot_point = np.array([897.322, 840.001, 365.043]) * MM_TO_M
-        self.center_of_mass = np.array([1252.737, 845.036, 400.716]) * MM_TO_M
-        self.mass_in_kg = 36.1736
-        self.max_door_angle_in_degrees = 67
+        self.hinge_upper_point = parameters.hinge_upper_point * MM_TO_M
+        self.hinge_lower_point = parameters.hinge_lower_point * MM_TO_M
+        self.body_pillar_point = parameters.body_pillar_point * MM_TO_M
+        self.actuator_pivot_point = parameters.actuator_pivot_point * MM_TO_M
+        self.center_of_mass = parameters.center_of_mass * MM_TO_M
+        self.mass_in_kg = parameters.mass_in_kg
+        self.max_door_angle_in_degrees = parameters.max_door_angle_in_degrees
 
         # Parameters of model
         self.num_door_angles = 30
