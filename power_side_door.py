@@ -190,10 +190,6 @@ class MainWindow(QtWidgets.QMainWindow):
         self.door_model = DoorModel(parameters=parameters)
 
         # Plot torque
-        # self.torque_plot = MplWidget(self.torque)
-        # NavigationToolbar(self.torque_plot.canvas, self.torque)
-        # self.torque_plot.setGeometry(graph_2d_size)
-        # self.torque_plot.setObjectName("torquePlot")
         self.torque_plot.canvas.ax.clear()
         self.door_model.plot_torques_gui(
             [CarPose(pitch=self.pitch.value(), roll=self.roll.value())],
@@ -202,19 +198,11 @@ class MainWindow(QtWidgets.QMainWindow):
         self.torque_plot.canvas.draw()
 
         # Plot moment arm
-        # self.moment_plot = MplWidget(self.moment_arm)
-        # NavigationToolbar(self.moment_plot.canvas, self.moment_arm)
-        # self.moment_plot.setGeometry(graph_2d_size)
-        # self.moment_plot.setObjectName("momentPlot")
         self.moment_plot.canvas.ax.clear()
         self.door_model.plot_moment_arm_gui(self.moment_plot.canvas.ax)
         self.moment_plot.canvas.draw()
 
         # Plot configuration
-        # self.configuration_plot = MplWidget(self.vis_configuration, is_3d=True)
-        # NavigationToolbar(self.configuration_plot.canvas, self.vis_configuration)
-        # self.configuration_plot.setGeometry(graph_3d_size)
-        # self.configuration_plot.setObjectName("configurationPlot")
         self.configuration_plot.canvas.ax.clear()
         self.door_model.visualize_hinge_and_center_of_mass(
             self.configuration_plot.canvas.ax
@@ -222,19 +210,11 @@ class MainWindow(QtWidgets.QMainWindow):
         self.configuration_plot.canvas.draw()
 
         # Plot incline
-        # self.incline_plot = MplWidget(self.vis_incline, is_3d=True)
-        # NavigationToolbar(self.incline_plot.canvas, self.vis_incline)
-        # self.incline_plot.setGeometry(graph_3d_size)
-        # self.incline_plot.setObjectName("inclinePlot")
         self.incline_plot.canvas.ax.clear()
         self.door_model.visualize_in_3D(0, 0, self.incline_plot.canvas.ax)
         self.incline_plot.canvas.draw()
 
         # Plot moment arm visualization
-        # self.moment_arm_plot = MplWidget(self.vis_moment_arm, is_3d=True)
-        # NavigationToolbar(self.moment_arm_plot.canvas, self.vis_moment_arm)
-        # self.moment_arm_plot.setGeometry(graph_3d_size)
-        # self.moment_arm_plot.setObjectName("momentArmPlot")
         self.moment_arm_plot.canvas.ax.clear()
         self.door_model.visualize_actuation_frames(ax=self.moment_arm_plot.canvas.ax)
         self.moment_arm_plot.canvas.draw()
