@@ -135,9 +135,12 @@ class DoorModel:
     def angles(self):
         return np.linspace(0, self.max_door_angle, num=self.num_door_angles)
 
-    def visualize_in_3D(self, roll, pitch):
+    def visualize_in_3D(self, roll, pitch, ax=None):
 
-        ax = plt.axes(projection="3d")
+        is_gui = True
+        if ax == None:
+            ax = plt.axes(projection="3d")
+            is_gui = False
 
         # Compute rotation matrices
         R_inertial_to_car = self.get_rotation_inertial_to_car(roll, pitch)
@@ -185,8 +188,11 @@ class DoorModel:
         ax.plot3D(points[0], points[1], points[2], "purple", label="Door Motion")
         ax.axis([-1, 1, -1, 1])
 
-        plt.legend()
-        plt.show()
+        if is_gui:
+            ax.legend(loc="upper left", bbox_to_anchor=(1.12, 1.0))
+        else:
+            plt.legend()
+            plt.show()
 
     def compute_torque_along_door_motion(self, roll, pitch):
 
@@ -245,6 +251,25 @@ class DoorModel:
         ax.set_ylabel("Torque at Hinge (Nm)")
         plt.legend()
         plt.show()
+
+    def plot_torques_gui(self, poses: list[CarPose], ax):
+        angles = self.angles
+        for pose in poses:
+            torques = self.compute_torque_along_door_motion(
+                roll=pose.roll, pitch=pose.pitch
+            )
+            ax.plot(
+                angles * 180 / math.pi,
+                torques,
+                label=f"Roll: {math.degrees(pose.roll)}, Pitch: {math.degrees(pose.pitch)}",
+            )
+
+        ax.tick_params(width=2)
+        ax.set_title("Hinge Torque")
+        ax.set_xlabel("Door Position From Closed (Degrees)")
+        ax.set_ylabel("Torque at Hinge (Nm)")
+        ax.legend()
+        ax.grid()
 
     def plot_torques_new(self, poses: list[CarPose]):
 
@@ -313,6 +338,21 @@ class DoorModel:
 
         return effective_moment_arms
 
+    def plot_moment_arm_gui(self, ax):
+
+        moment_arm = self.compute_effective_moment_arm_along_door_motion()
+        ax.plot(self.angles * 180 / math.pi, moment_arm)
+
+        ax.set_title(f"Moment Arm vs Door Position")
+        ax.tick_params(width=2)
+        ax.set_xlabel("Door Position From Closed (Degrees)")
+        ax.set_ylabel("Moment Arm (mm)")
+        ax.set_ylim(bottom=0)
+        ax.set_xlim(left=0)
+        ax.set_yticks(range(0, 125, 5))
+        ax.grid()
+        ax.legend()
+
     def plot_moment_arm(self):
 
         ax = plt.axes()
@@ -331,8 +371,12 @@ class DoorModel:
         plt.legend()
         plt.show()
 
-    def visualize_hinge_and_center_of_mass(self):
-        ax = plt.axes(projection="3d")
+    def visualize_hinge_and_center_of_mass(self, ax=None):
+
+        is_gui = True
+        if ax == None:
+            ax = plt.axes(projection="3d")
+            is_gui = False
 
         ax.scatter3D(
             self.center_of_mass[0],
@@ -374,41 +418,44 @@ class DoorModel:
             [self.hinge_upper_point[1] - self.hinge_lower_point[1], 0],
             [self.hinge_upper_point[2] - self.hinge_lower_point[2], 0],
             "brown",
-            label="Rotation Axis",
+            label="Hinge Axis",
         )
         ax.plot3D(
             [self.origin[0], self.center_of_mass[0]],
             [self.origin[1], self.center_of_mass[1]],
             [self.origin[2], self.center_of_mass[2]],
             "orange",
-            label="cm to origin",
+            label="CM to origin",
         )
         ax.plot3D(
             [self.actuator_pivot_point[0], self.center_of_mass[0]],
             [self.actuator_pivot_point[1], self.center_of_mass[1]],
             [self.actuator_pivot_point[2], self.center_of_mass[2]],
             "gray",
-            label="CM to Actuation Point - Rigid",
+            label="CM to Actuation Point",
         )
         ax.plot3D(
             [self.actuator_pivot_point[0], self.actuation_origin[0]],
             [self.actuator_pivot_point[1], self.actuation_origin[1]],
             [self.actuator_pivot_point[2], self.actuation_origin[2]],
             "gray",
-            label="Actuation Point to Rotational Axis - Rigid",
+            label="Actuation Point to Hinge Axis",
         )
         ax.plot3D(
             [self.body_pillar_point[0], self.actuation_origin[0]],
             [self.body_pillar_point[1], self.actuation_origin[1]],
             [self.body_pillar_point[2], self.actuation_origin[2]],
             "magenta",
-            label="Body Pillar Moment Arm - Rigid",
+            label="Body Pillar Moment Arm",
         )
 
-        plt.legend()
-        plt.show()
+        if is_gui:
+            ax.legend(loc="upper left", bbox_to_anchor=(1.0, 1.0))
+        else:
+            plt.legend()
+            plt.show()
 
-    def visualize_actuation_frames(self):
+    def visualize_actuation_frames(self, ax=None):
 
         # Compute actuation points in body pillar frame
         actuator_pivot_point = self.actuator_pivot_point - self.body_pillar_origin
@@ -433,7 +480,11 @@ class DoorModel:
         v_proj = np.dot(v1, v2) * v2 + body_pillar_point
 
         # Plot the axes
-        ax = plt.axes(projection="3d")
+        is_gui = True
+        if ax == None:
+            ax = plt.axes(projection="3d")
+            is_gui = False
+
         ax.scatter3D(
             body_pillar_point[0],
             body_pillar_point[1],
@@ -492,8 +543,12 @@ class DoorModel:
         )
 
         ax.set_zlim3d(-0.05, 0.2)
-        plt.legend()
-        plt.show()
+
+        if is_gui:
+            ax.legend(loc="upper left", bbox_to_anchor=(1.12, 1.0))
+        else:
+            plt.legend()
+            plt.show()
 
 
 if __name__ == "__main__":
